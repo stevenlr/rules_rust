@@ -155,7 +155,7 @@ def _rust_binary_impl(ctx):
         ),
     )
 
-def _rust_test_common(ctx, test_binary):
+def _rust_test_common(ctx):
     """
     Builds a Rust test binary.
 
@@ -164,38 +164,43 @@ def _rust_test_common(ctx, test_binary):
         test_binary: The File object for the test binary.
     """
     toolchain = find_toolchain(ctx)
+    system = triple_to_system(toolchain.target_triple)
+    binary_ext = system_to_binary_ext(system)
+    crate_name = ctx.label.name.replace("-", "_")
+
+    output = ctx.actions.declare_file(crate_name + binary_ext)
 
     if ctx.attr.crate:
         # Target is building the crate in `test` config
         # Build the test binary using the dependency's srcs.
         crate = ctx.attr.crate[CrateInfo]
         target = CrateInfo(
-            name = test_binary.basename,
-            type = crate.type,
+            name = crate_name,
+            type = "bin",
             root = crate.root,
             srcs = crate.srcs + ctx.files.srcs,
             deps = crate.deps + ctx.attr.deps,
             aliases = ctx.attr.aliases,
-            output = test_binary,
+            output = output,
             edition = crate.edition,
         )
     elif len(ctx.attr.deps) == 1 and len(ctx.files.srcs) == 0:
         dep = ctx.attr.deps[0].label
         msg = _OLD_INLINE_TEST_CRATE_MSG.format(
-            name = test_binary.basename,
+            name = crate_name,
             dep = dep if ctx.label.package != dep.package else ":" + dep.name,
         )
         fail(msg)
     else:
         # Target is a standalone crate. Build the test binary as its own crate.
         target = CrateInfo(
-            name = test_binary.basename,
+            name = crate_name,
             type = "lib",
             root = _crate_root_src(ctx),
             srcs = ctx.files.srcs,
             deps = ctx.attr.deps,
             aliases = ctx.attr.aliases,
-            output = test_binary,
+            output = output,
             edition = _get_edition(ctx, toolchain),
         )
 
@@ -207,7 +212,7 @@ def _rust_test_common(ctx, test_binary):
     )
 
 def _rust_test_impl(ctx):
-    return _rust_test_common(ctx, ctx.outputs.executable)
+    return _rust_test_common(ctx)
 
 def _rust_benchmark_impl(ctx):
     bench_script = ctx.outputs.executable
@@ -217,7 +222,7 @@ def _rust_benchmark_impl(ctx):
         "{}_bin".format(bench_script.basename),
         sibling = ctx.configuration.bin_dir,
     )
-    info = _rust_test_common(ctx, bench_binary)
+    info = _rust_test_common(ctx)
 
     # Wrap the benchmark to run it as cargo would.
     ctx.actions.write(
