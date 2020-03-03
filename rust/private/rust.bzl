@@ -15,6 +15,7 @@
 load("@io_bazel_rules_rust//rust:private/rustc.bzl", "CrateInfo", "rustc_compile_action")
 load("@io_bazel_rules_rust//rust:private/utils.bzl", "find_toolchain")
 load("@io_bazel_rules_rust//rust:private/transitions.bzl", "proc_macro_host_transition")
+load("@io_bazel_rules_rust//rust/platform:triple_mappings.bzl", "system_to_binary_ext", "triple_to_system")
 
 _OLD_INLINE_TEST_CRATE_MSG = """
 --------------------------------------------------------------------------------
@@ -130,12 +131,14 @@ def _rust_library_impl(ctx):
 
 def _rust_binary_impl(ctx):
     toolchain = find_toolchain(ctx)
+    system = triple_to_system(toolchain.target_triple)
+    binary_ext = system_to_binary_ext(system)
     crate_name = ctx.label.name.replace("-", "_")
 
     if (toolchain.target_arch == "wasm32"):
         output = ctx.actions.declare_file(crate_name + ".wasm")
     else:
-        output = ctx.actions.declare_file(crate_name)
+        output = ctx.actions.declare_file(crate_name + binary_ext)
 
     return rustc_compile_action(
         ctx = ctx,
